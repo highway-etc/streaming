@@ -1,0 +1,5 @@
+FROM eclipse-temurin:17-jre
+WORKDIR /app
+# 假设 Gradle 打包产物为 build/libs/streaming-all.jar
+COPY build/libs/*all*.jar /app/app.jar
+ENTRYPOINT ["java","-jar","/app/app.jar"]
