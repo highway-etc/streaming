@@ -1,0 +1,54 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'com.highway.etc'
+version = '0.1.0'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation platform("org.apache.flink:flink-bom:1.18.1")
+    implementation "org.apache.flink:flink-java"
+    implementation "org.apache.flink:flink-streaming-java"
+    implementation "org.apache.flink:flink-clients"
+    implementation "org.apache.flink:flink-connector-kafka:1.18.1"
+    implementation "org.apache.flink:flink-connector-jdbc:1.18.1"
+
+    implementation "com.fasterxml.jackson.core:jackson-databind:2.17.1"
+    implementation "com.fasterxml.jackson.core:jackson-core:2.17.1"
+    implementation "com.fasterxml.jackson.core:jackson-annotations:2.17.1"
+
+    implementation "org.slf4j:slf4j-api:2.0.12"
+    runtimeOnly "org.slf4j:slf4j-simple:2.0.12"
+
+    implementation "mysql:mysql-connector-java:8.0.33"
+}
+
+application {
+    // 运行主类（可按需切换到 PlateCloneDetectionJob）
+    mainClass = 'com.highway.etc.job.TrafficStreamingJob'
+}
+
+java {
+    // Toolchain 使用 JDK 17（Gradle 会尝试使用或自动下载）
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+    // 如果你更喜欢直接设置兼容性（Gradle 9 的正确写法）：
+    // sourceCompatibility = JavaVersion.VERSION_17
+    // targetCompatibility = JavaVersion.VERSION_17
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'com.highway.etc.job.TrafficStreamingJob'
+    }
+}
