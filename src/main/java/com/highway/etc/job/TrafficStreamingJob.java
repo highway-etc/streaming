@@ -4,22 +4,24 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.highway.etc.common.EnrichedEvent;
 import com.highway.etc.common.Event;
-import com.highway.etc.common.JsonUtils;
 import com.highway.etc.sink.MySqlBatchSink;
 import com.highway.etc.sink.MySqlStatsSink;
 import com.highway.etc.sink.MySqlStatsSink.StatsRecord;
-import org.apache.flink.api.common.eventtime.*;
-import org.apache.flink.api.common.functions.AggregateFunction;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.serialization.AbstractDeserializationSchema;
 import org.apache.flink.api.java.functions.KeySelector;
-import org.apache.flink.streaming.api.datastream.*;
-import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
+import org.apache.flink.streaming.api.windowing.time.Time;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
+import org.apache.flink.util.Collector;
 
 import java.io.FileInputStream;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.util.*;
 
@@ -52,13 +54,14 @@ public class TrafficStreamingJob {
                 .setValueOnlyDeserializer(new EventDeserializer())
                 .build();
 
-        DataStream<Event> raw = env.fromSource(kafkaSource,
+        DataStream<Event> raw = env.fromSource(
+                kafkaSource,
                 WatermarkStrategy
                         .<Event>forBoundedOutOfOrderness(java.time.Duration.ofMillis(watermarkOutOfOrderMs))
                         .withTimestampAssigner((e, ts) -> e.gcsj.toEpochMilli()),
-                "kafka-source");
+                "kafka-source"
+        );
 
-        // 简单清洗 + 脱敏检查 + 可做字典补全（此处示例直接复制）
         DataStream<EnrichedEvent> enriched = raw.map(e -> {
             EnrichedEvent ne = new EnrichedEvent();
             ne.gcxh = e.gcxh;
@@ -76,17 +79,14 @@ public class TrafficStreamingJob {
             return ne;
         }).name("enrich-map");
 
-        // 明细写入 MySQL
         enriched.addSink(new MySqlBatchSink(mysqlUrl, mysqlUser, mysqlPwd, insertSql, batchSize))
                 .name("mysql-batch-sink");
 
-        // 窗口聚合：按 stationId 滑动/翻转窗口（这里用滚动窗口 30s）
+        // 按站点滚动窗口 30s 统计
         DataStream<StatsRecord> stats = enriched
                 .keyBy((KeySelector<EnrichedEvent, Integer>) e -> e.stationId)
-                .window(org.apache.flink.streaming.api.windowing.time.TimeWindow
-                        .size(org.apache.flink.streaming.api.windowing.time.Time.seconds(30))
-                        .getWindowAssigner()) // 这里直接写固定窗口更简洁：.window(TumblingEventTimeWindows.of(Time.seconds(30)))
-                .process(new org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction<EnrichedEvent, StatsRecord, Integer, org.apache.flink.streaming.api.windowing.windows.TimeWindow>() {
+                .window(TumblingEventTimeWindows.of(Time.seconds(30)))
+                .process(new ProcessWindowFunction<EnrichedEvent, StatsRecord, Integer, TimeWindow>() {
                     @Override
                     public void process(Integer key, Context context, Iterable<EnrichedEvent> elements, Collector<StatsRecord> out) {
                         long cnt = 0;
@@ -114,30 +114,37 @@ public class TrafficStreamingJob {
         env.execute("TrafficStreamingJob");
     }
 
-    // 自定义反序列化
+    // 自定义反序列化：Flink 1.18 的 AbstractDeserializationSchema#deserialize 不再声明 throws Exception
     public static class EventDeserializer extends AbstractDeserializationSchema<Event> {
         private final ObjectMapper mapper = new ObjectMapper();
         @Override
-        public Event deserialize(byte[] message) throws Exception {
-            JsonNode n = mapper.readTree(message);
-            Event e = new Event();
-            e.gcxh = n.path("gcxh").asLong();
-            e.xzqhmc = n.path("xzqhmc").asText(null);
-            e.adcode = n.path("adcode").asInt(0);
-            e.kkmc = n.path("kkmc").asText(null);
-            e.stationId = n.path("station_id").asInt(0);
-            e.fxlx = n.path("fxlx").asText(null);
-            String gcsjStr = n.path("gcsj").asText(null);
+        public Event deserialize(byte[] message) {
             try {
-                e.gcsj = Instant.parse(gcsjStr);
-            } catch (DateTimeParseException ex) {
+                JsonNode n = mapper.readTree(message);
+                Event e = new Event();
+                e.gcxh = n.path("gcxh").asLong();
+                e.xzqhmc = n.path("xzqhmc").asText(null);
+                e.adcode = n.path("adcode").asInt(0);
+                e.kkmc = n.path("kkmc").asText(null);
+                e.stationId = n.path("station_id").asInt(0);
+                e.fxlx = n.path("fxlx").asText(null);
+                String gcsjStr = n.path("gcsj").asText(null);
+                try {
+                    e.gcsj = Instant.parse(gcsjStr);
+                } catch (DateTimeParseException ex) {
+                    e.gcsj = Instant.now();
+                }
+                e.hpzl = n.path("hpzl").asText(null);
+                e.hphm = n.path("hphm").asText(null);
+                e.hphmMask = n.path("hphm_mask").asText(null);
+                e.clppxh = n.path("clppxh").asText(null);
+                return e;
+            } catch (Exception ex) {
+                // 解析失败时返回一个默认事件或丢弃（可按需改为 null 并在上游 filter）
+                Event e = new Event();
                 e.gcsj = Instant.now();
+                return e;
             }
-            e.hpzl = n.path("hpzl").asText(null);
-            e.hphm = n.path("hphm").asText(null);
-            e.hphmMask = n.path("hphm_mask").asText(null);
-            e.clppxh = n.path("clppxh").asText(null);
-            return e;
         }
     }
 }

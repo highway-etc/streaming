@@ -78,16 +78,21 @@ public class PlateCloneDetectionJob {
     public static class BasicEventDeserializer extends AbstractDeserializationSchema<Event> {
         private final ObjectMapper mapper = new ObjectMapper();
         @Override
-        public Event deserialize(byte[] message) throws Exception {
-            JsonNode n = mapper.readTree(message);
-            Event e = new Event();
-            e.gcxh = n.path("gcxh").asLong();
-            e.hphm = n.path("hphm").asText(null);
-            e.hphmMask = n.path("hphm_mask").asText(null);
-            e.stationId = n.path("station_id").asInt(0);
-            e.gcsj = Instant.parse(n.path("gcsj").asText(Instant.now().toString()));
-            e.clppxh = n.path("clppxh").asText(null);
-            return e;
+        public Event deserialize(byte[] message) {
+            try {
+                JsonNode n = mapper.readTree(message);
+                Event e = new Event();
+                e.gcxh = n.path("gcxh").asLong();
+                e.hphm = n.path("hphm").asText(null);
+                e.hphmMask = n.path("hphm_mask").asText(null);
+                e.stationId = n.path("station_id").asInt(0);
+                e.gcsj = Instant.parse(n.path("gcsj").asText(Instant.now().toString()));
+                e.clppxh = n.path("clppxh").asText(null);
+                return e;
+            } catch (Exception ex) {
+                return null;
+            }
+            
         }
     }
 
