@@ -1,23 +1,13 @@
 package com.highway.etc.sink;
 
+import com.highway.etc.common.StatsRecord;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.sql.*;
-import java.time.Instant;
-import java.util.Map;
 
 public class MySqlStatsSink extends RichSinkFunction<StatsRecord> {
-
-    public static class StatsRecord {
-        public int stationId;
-        public Instant windowStart;
-        public Instant windowEnd;
-        public long count;
-        public Map<String, Long> byDir;
-        public Map<String, Long> byType;
-    }
 
     private final String url;
     private final String user;

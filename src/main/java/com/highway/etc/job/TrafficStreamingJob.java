@@ -4,9 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.highway.etc.common.EnrichedEvent;
 import com.highway.etc.common.Event;
+import com.highway.etc.common.StatsRecord;
 import com.highway.etc.sink.MySqlBatchSink;
 import com.highway.etc.sink.MySqlStatsSink;
-import com.highway.etc.sink.MySqlStatsSink.StatsRecord;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.serialization.AbstractDeserializationSchema;
 import org.apache.flink.api.java.functions.KeySelector;
@@ -82,7 +82,7 @@ public class TrafficStreamingJob {
         enriched.addSink(new MySqlBatchSink(mysqlUrl, mysqlUser, mysqlPwd, insertSql, batchSize))
                 .name("mysql-batch-sink");
 
-        // 按站点滚动窗口 30s 统计
+        // 30 秒滚动窗口统计
         DataStream<StatsRecord> stats = enriched
                 .keyBy((KeySelector<EnrichedEvent, Integer>) e -> e.stationId)
                 .window(TumblingEventTimeWindows.of(Time.seconds(30)))
@@ -114,7 +114,7 @@ public class TrafficStreamingJob {
         env.execute("TrafficStreamingJob");
     }
 
-    // 自定义反序列化：Flink 1.18 的 AbstractDeserializationSchema#deserialize 不再声明 throws Exception
+    // Flink 1.18: 反序列化方法不再声明 throws Exception
     public static class EventDeserializer extends AbstractDeserializationSchema<Event> {
         private final ObjectMapper mapper = new ObjectMapper();
         @Override
@@ -131,7 +131,7 @@ public class TrafficStreamingJob {
                 String gcsjStr = n.path("gcsj").asText(null);
                 try {
                     e.gcsj = Instant.parse(gcsjStr);
-                } catch (DateTimeParseException ex) {
+                } catch (Exception ignore) {
                     e.gcsj = Instant.now();
                 }
                 e.hpzl = n.path("hpzl").asText(null);
@@ -140,10 +140,7 @@ public class TrafficStreamingJob {
                 e.clppxh = n.path("clppxh").asText(null);
                 return e;
             } catch (Exception ex) {
-                // 解析失败时返回一个默认事件或丢弃（可按需改为 null 并在上游 filter）
-                Event e = new Event();
-                e.gcsj = Instant.now();
-                return e;
+                return null; // 解析失败可返回 null，上游可 filter 掉
             }
         }
     }
