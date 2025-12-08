@@ -1,0 +1,13 @@
+D:\Projects\highway-etc\streaming\src\main\java\com\highway\etc\util\RedisDictLoader.java
+D:\Projects\highway-etc\streaming\src\main\java\com\highway\etc\job\PlateCloneDetectionJob.java
+D:\Projects\highway-etc\streaming\src\main\java\com\highway\etc\sink\MySqlBatchSink.java
+D:\Projects\highway-etc\streaming\src\main\java\com\highway\etc\common\StationInfo.java
+D:\Projects\highway-etc\streaming\src\main\java\com\highway\etc\common\Alert.java
+D:\Projects\highway-etc\streaming\src\main\java\com\highway\etc\common\StatsRecord.java
+D:\Projects\highway-etc\streaming\src\main\java\com\highway\etc\sink\MySqlAlertSink.java
+D:\Projects\highway-etc\streaming\src\main\java\com\highway\etc\common\EnrichedEvent.java
+D:\Projects\highway-etc\streaming\src\main\java\com\highway\etc\common\Event.java
+D:\Projects\highway-etc\streaming\src\main\java\com\highway\etc\sink\MySqlStatsSink.java
+D:\Projects\highway-etc\streaming\src\main\java\com\highway\etc\job\TrafficStreamingJob.java
+D:\Projects\highway-etc\streaming\src\main\java\com\highway\etc\util\DistanceUtil.java
+D:\Projects\highway-etc\streaming\src\main\java\com\highway\etc\common\JsonUtils.java

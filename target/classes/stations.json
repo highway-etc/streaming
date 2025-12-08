@@ -1,0 +1,5 @@
+[
+  { "stationId": 101, "name": "Station-A", "lat": 23.129, "lon": 113.264 },
+  { "stationId": 102, "name": "Station-B", "lat": 22.543, "lon": 114.057 },
+  { "stationId": 103, "name": "Station-C", "lat": 23.392, "lon": 116.700 }
+]

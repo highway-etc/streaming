@@ -1,0 +1,17 @@
+com\highway\etc\job\TrafficStreamingJob$EventDeserializer.class
+com\highway\etc\common\StationInfo.class
+com\highway\etc\job\PlateCloneDetectionJob$CloneDetectProcessFunction.class
+com\highway\etc\util\RedisDictLoader.class
+com\highway\etc\job\PlateCloneDetectionJob.class
+com\highway\etc\common\JsonUtils.class
+com\highway\etc\common\EnrichedEvent.class
+com\highway\etc\job\PlateCloneDetectionJob$BasicEventDeserializer.class
+com\highway\etc\util\DistanceUtil.class
+com\highway\etc\job\TrafficStreamingJob.class
+com\highway\etc\sink\MySqlStatsSink.class
+com\highway\etc\job\TrafficStreamingJob$1.class
+com\highway\etc\common\Alert.class
+com\highway\etc\common\Event.class
+com\highway\etc\sink\MySqlBatchSink.class
+com\highway\etc\common\StatsRecord.class
+com\highway\etc\sink\MySqlAlertSink.class
