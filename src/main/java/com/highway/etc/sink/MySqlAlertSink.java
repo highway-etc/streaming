@@ -1,10 +1,13 @@
 package com.highway.etc.sink;
 
-import com.highway.etc.common.Alert;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
 
-import java.sql.*;
+import com.highway.etc.common.Alert;
 
 public class MySqlAlertSink extends RichSinkFunction<Alert> {
 
@@ -31,6 +34,9 @@ public class MySqlAlertSink extends RichSinkFunction<Alert> {
 
     @Override
     public void invoke(Alert a, Context context) throws Exception {
+        if (a == null) {
+            return;
+        }
         ps.setString(1, a.hphmMask);
         ps.setInt(2, a.firstStationId);
         ps.setInt(3, a.secondStationId);
@@ -43,7 +49,11 @@ public class MySqlAlertSink extends RichSinkFunction<Alert> {
 
     @Override
     public void close() throws Exception {
-        if (ps != null) ps.close();
-        if (conn != null) conn.close();
+        if (ps != null) {
+            ps.close();
+        }
+        if (conn != null) {
+            conn.close();
+        }
     }
 }

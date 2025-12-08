@@ -1,14 +1,25 @@
 package com.highway.etc.sink;
 
-import com.highway.etc.common.EnrichedEvent;
-import org.apache.flink.configuration.Configuration;
-import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
-
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 
-public class MySqlBatchSink extends RichSinkFunction<EnrichedEvent> {
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.runtime.state.FunctionInitializationContext;
+import org.apache.flink.runtime.state.FunctionSnapshotContext;
+import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
+import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
+
+import com.highway.etc.common.EnrichedEvent;
+
+/**
+ * JDBC batch sink with checkpoint-triggered flush.
+ */
+public class MySqlBatchSink extends RichSinkFunction<EnrichedEvent> implements CheckpointedFunction {
+
     private final String url;
     private final String user;
     private final String password;
@@ -37,6 +48,9 @@ public class MySqlBatchSink extends RichSinkFunction<EnrichedEvent> {
 
     @Override
     public void invoke(EnrichedEvent e, Context context) throws Exception {
+        if (e == null) {
+            return;
+        }
         buffer.add(e);
         if (buffer.size() >= batchSize) {
             flush();
@@ -44,6 +58,9 @@ public class MySqlBatchSink extends RichSinkFunction<EnrichedEvent> {
     }
 
     private void flush() throws Exception {
+        if (buffer == null || buffer.isEmpty()) {
+            return;
+        }
         for (EnrichedEvent e : buffer) {
             ps.setTimestamp(1, Timestamp.from(e.gcsj));
             ps.setString(2, e.xzqhmc);
@@ -56,15 +73,36 @@ public class MySqlBatchSink extends RichSinkFunction<EnrichedEvent> {
             ps.setString(9, e.clppxh);
             ps.addBatch();
         }
-        ps.executeBatch();
-        conn.commit();
-        buffer.clear();
+        try {
+            ps.executeBatch();
+            conn.commit();
+        } finally {
+            ps.clearBatch();
+            buffer.clear();
+        }
     }
 
     @Override
     public void close() throws Exception {
-        if (!buffer.isEmpty()) flush();
-        if (ps != null) ps.close();
-        if (conn != null) conn.close();
+        try {
+            flush();
+        } finally {
+            if (ps != null) {
+                ps.close();
+            }
+            if (conn != null) {
+                conn.close();
+            }
+        }
+    }
+
+    @Override
+    public void snapshotState(FunctionSnapshotContext context) throws Exception {
+        flush();
+    }
+
+    @Override
+    public void initializeState(FunctionInitializationContext context) {
+        // stateless
     }
 }

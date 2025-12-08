@@ -1,12 +1,12 @@
 package com.highway.etc.job;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.highway.etc.common.EnrichedEvent;
-import com.highway.etc.common.Event;
-import com.highway.etc.common.StatsRecord;
-import com.highway.etc.sink.MySqlBatchSink;
-import com.highway.etc.sink.MySqlStatsSink;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Properties;
+
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.serialization.AbstractDeserializationSchema;
 import org.apache.flink.api.java.functions.KeySelector;
@@ -20,28 +20,31 @@ import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.util.Collector;
 
-import java.io.FileInputStream;
-import java.time.Instant;
-import java.time.format.DateTimeParseException;
-import java.util.*;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.highway.etc.common.EnrichedEvent;
+import com.highway.etc.common.Event;
+import com.highway.etc.common.JsonUtils;
+import com.highway.etc.common.StatsRecord;
+import com.highway.etc.sink.MySqlBatchSink;
+import com.highway.etc.sink.MySqlStatsSink;
 
 public class TrafficStreamingJob {
 
-    public static void main(String[] args) throws Exception {
-        Properties props = new Properties();
-        try (FileInputStream fis = new FileInputStream("src/main/resources/application.properties")) {
-            props.load(fis);
-        }
+    private static final String PROPS_FILE = "application.properties";
 
-        final String kafkaServers = props.getProperty("kafka.bootstrap.servers");
-        final String topic = props.getProperty("kafka.topic");
-        final String mysqlUrl = props.getProperty("mysql.url");
-        final String mysqlUser = props.getProperty("mysql.user");
-        final String mysqlPwd = props.getProperty("mysql.password");
-        final int batchSize = Integer.parseInt(props.getProperty("mysql.batch.size","500"));
-        final String insertSql = props.getProperty("mysql.insert.sql");
-        final String statsInsertSql = props.getProperty("mysql.stats.insert.sql");
-        final long watermarkOutOfOrderMs = Long.parseLong(props.getProperty("event.out.of.order.ms","120000"));
+    public static void main(String[] args) throws Exception {
+        Properties props = JsonUtils.loadProperties(PROPS_FILE, "src/main/resources/" + PROPS_FILE);
+
+        String kafkaServers = JsonUtils.requireProperty(props, "kafka.bootstrap.servers");
+        String topic = JsonUtils.requireProperty(props, "kafka.topic");
+        String mysqlUrl = JsonUtils.requireProperty(props, "mysql.url");
+        String mysqlUser = JsonUtils.requireProperty(props, "mysql.user");
+        String mysqlPwd = JsonUtils.requireProperty(props, "mysql.password");
+        int batchSize = Integer.parseInt(JsonUtils.optionalProperty(props, "mysql.batch.size", "500"));
+        String insertSql = JsonUtils.requireProperty(props, "mysql.insert.sql");
+        String statsInsertSql = JsonUtils.requireProperty(props, "mysql.stats.insert.sql");
+        long watermarkOutOfOrderMs = Long.parseLong(JsonUtils.optionalProperty(props, "event.out.of.order.ms", "120000"));
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.getConfig().setAutoWatermarkInterval(2000);
@@ -49,64 +52,28 @@ public class TrafficStreamingJob {
         KafkaSource<Event> kafkaSource = KafkaSource.<Event>builder()
                 .setBootstrapServers(kafkaServers)
                 .setTopics(topic)
-                .setGroupId(props.getProperty("kafka.group.id","traffic-consumer"))
+                .setGroupId(props.getProperty("kafka.group.id", "traffic-consumer"))
                 .setStartingOffsets(OffsetsInitializer.latest())
                 .setValueOnlyDeserializer(new EventDeserializer())
                 .build();
 
-        DataStream<Event> raw = env.fromSource(
-                kafkaSource,
-                WatermarkStrategy
-                        .<Event>forBoundedOutOfOrderness(java.time.Duration.ofMillis(watermarkOutOfOrderMs))
-                        .withTimestampAssigner((e, ts) -> e.gcsj.toEpochMilli()),
-                "kafka-source"
-        );
+        WatermarkStrategy<Event> wm = WatermarkStrategy
+                .<Event>forBoundedOutOfOrderness(Duration.ofMillis(watermarkOutOfOrderMs))
+                .withTimestampAssigner((e, ts) -> e.gcsj.toEpochMilli());
 
-        DataStream<EnrichedEvent> enriched = raw.map(e -> {
-            EnrichedEvent ne = new EnrichedEvent();
-            ne.gcxh = e.gcxh;
-            ne.xzqhmc = e.xzqhmc == null ? "" : e.xzqhmc;
-            ne.adcode = e.adcode;
-            ne.kkmc = e.kkmc == null ? "" : e.kkmc;
-            ne.stationId = e.stationId;
-            ne.fxlx = e.fxlx == null ? "" : e.fxlx;
-            ne.gcsj = e.gcsj;
-            ne.hpzl = e.hpzl == null ? "" : e.hpzl;
-            ne.hphm = e.hphm == null ? "" : e.hphm;
-            ne.hphmMask = e.hphmMask == null && e.hphm != null ? e.hphm.substring(0, Math.min(4,e.hphm.length())) + "****" : e.hphmMask;
-            ne.clppxh = e.clppxh == null ? "" : e.clppxh;
-            ne.tags = Collections.emptyMap();
-            return ne;
-        }).name("enrich-map");
+        DataStream<Event> raw = env.fromSource(kafkaSource, wm, "kafka-source")
+                .filter(e -> e != null && e.hasEssentialFields());
+
+        DataStream<EnrichedEvent> enriched = raw.map(TrafficStreamingJob::enrich).name("enrich-map");
 
         enriched.addSink(new MySqlBatchSink(mysqlUrl, mysqlUser, mysqlPwd, insertSql, batchSize))
                 .name("mysql-batch-sink");
 
-        // 30 秒滚动窗口统计
         DataStream<StatsRecord> stats = enriched
                 .keyBy((KeySelector<EnrichedEvent, Integer>) e -> e.stationId)
                 .window(TumblingEventTimeWindows.of(Time.seconds(30)))
-                .process(new ProcessWindowFunction<EnrichedEvent, StatsRecord, Integer, TimeWindow>() {
-                    @Override
-                    public void process(Integer key, Context context, Iterable<EnrichedEvent> elements, Collector<StatsRecord> out) {
-                        long cnt = 0;
-                        Map<String, Long> dirMap = new HashMap<>();
-                        Map<String, Long> typeMap = new HashMap<>();
-                        for (EnrichedEvent e : elements) {
-                            cnt++;
-                            dirMap.merge(e.fxlx, 1L, Long::sum);
-                            typeMap.merge(e.hpzl, 1L, Long::sum);
-                        }
-                        StatsRecord r = new StatsRecord();
-                        r.stationId = key;
-                        r.windowStart = Instant.ofEpochMilli(context.window().getStart());
-                        r.windowEnd = Instant.ofEpochMilli(context.window().getEnd());
-                        r.count = cnt;
-                        r.byDir = dirMap;
-                        r.byType = typeMap;
-                        out.collect(r);
-                    }
-                }).name("window-agg-stats");
+                .process(new StatsWindowFn())
+                .name("window-agg-stats");
 
         stats.addSink(new MySqlStatsSink(mysqlUrl, mysqlUser, mysqlPwd, statsInsertSql))
                 .name("mysql-stats-sink");
@@ -114,9 +81,58 @@ public class TrafficStreamingJob {
         env.execute("TrafficStreamingJob");
     }
 
-    // Flink 1.18: 反序列化方法不再声明 throws Exception
+    private static EnrichedEvent enrich(Event e) {
+        EnrichedEvent ne = EnrichedEvent.from(e);
+        ne.xzqhmc = e.xzqhmc == null ? "" : e.xzqhmc;
+        ne.kkmc = e.kkmc == null ? "" : e.kkmc;
+        ne.fxlx = e.fxlx == null ? "" : e.fxlx;
+        ne.hpzl = e.hpzl == null ? "" : e.hpzl;
+        ne.hphm = e.hphm == null ? "" : e.hphm;
+        ne.hphmMask = maskPlate(e);
+        ne.clppxh = e.clppxh == null ? "" : e.clppxh;
+        ne.tags = Collections.emptyMap();
+        return ne;
+    }
+
+    private static String maskPlate(Event event) {
+        if (event.hphmMask != null && !event.hphmMask.isBlank()) {
+            return event.hphmMask;
+        }
+        if (event.hphm == null || event.hphm.isEmpty()) {
+            return "UNKNOWN";
+        }
+        int visible = Math.min(4, event.hphm.length());
+        return event.hphm.substring(0, visible) + "****";
+    }
+
+    private static class StatsWindowFn extends ProcessWindowFunction<EnrichedEvent, StatsRecord, Integer, TimeWindow> {
+
+        @Override
+        public void process(Integer key, Context context, Iterable<EnrichedEvent> elements, Collector<StatsRecord> out) {
+            long cnt = 0;
+            Map<String, Long> dirMap = new HashMap<>();
+            Map<String, Long> typeMap = new HashMap<>();
+            for (EnrichedEvent e : elements) {
+                cnt++;
+                dirMap.merge(e.fxlx, 1L, Long::sum);
+                typeMap.merge(e.hpzl, 1L, Long::sum);
+            }
+            StatsRecord r = new StatsRecord();
+            r.stationId = key;
+            r.windowStart = Instant.ofEpochMilli(context.window().getStart());
+            r.windowEnd = Instant.ofEpochMilli(context.window().getEnd());
+            r.count = cnt;
+            r.byDir = dirMap;
+            r.byType = typeMap;
+            out.collect(r);
+        }
+    }
+
+    // Flink 1.18: 反序列化不要返回 null
     public static class EventDeserializer extends AbstractDeserializationSchema<Event> {
+
         private final ObjectMapper mapper = new ObjectMapper();
+
         @Override
         public Event deserialize(byte[] message) {
             try {
@@ -130,7 +146,7 @@ public class TrafficStreamingJob {
                 e.fxlx = n.path("fxlx").asText(null);
                 String gcsjStr = n.path("gcsj").asText(null);
                 try {
-                    e.gcsj = Instant.parse(gcsjStr);
+                    e.gcsj = gcsjStr == null ? Instant.now() : Instant.parse(gcsjStr);
                 } catch (Exception ignore) {
                     e.gcsj = Instant.now();
                 }
@@ -140,7 +156,10 @@ public class TrafficStreamingJob {
                 e.clppxh = n.path("clppxh").asText(null);
                 return e;
             } catch (Exception ex) {
-                return null; // 解析失败可返回 null，上游可 filter 掉
+                Event e = new Event();
+                e.gcsj = Instant.now();
+                e.stationId = 0; // 让上游 filter 掉
+                return e;
             }
         }
     }

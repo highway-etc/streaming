@@ -1,11 +1,15 @@
 package com.highway.etc.sink;
 
-import com.highway.etc.common.StatsRecord;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.Timestamp;
+
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
-import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.sql.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.highway.etc.common.StatsRecord;
 
 public class MySqlStatsSink extends RichSinkFunction<StatsRecord> {
 
@@ -34,6 +38,9 @@ public class MySqlStatsSink extends RichSinkFunction<StatsRecord> {
 
     @Override
     public void invoke(StatsRecord r, Context context) throws Exception {
+        if (r == null) {
+            return;
+        }
         ps.setInt(1, r.stationId);
         ps.setTimestamp(2, Timestamp.from(r.windowStart));
         ps.setTimestamp(3, Timestamp.from(r.windowEnd));
@@ -45,7 +52,11 @@ public class MySqlStatsSink extends RichSinkFunction<StatsRecord> {
 
     @Override
     public void close() throws Exception {
-        if (ps != null) ps.close();
-        if (conn != null) conn.close();
+        if (ps != null) {
+            ps.close();
+        }
+        if (conn != null) {
+            conn.close();
+        }
     }
 }

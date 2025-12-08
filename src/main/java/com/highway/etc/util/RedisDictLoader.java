@@ -1,15 +1,22 @@
 package com.highway.etc.util;
 
-import redis.clients.jedis.JedisPooled;
 import java.util.Map;
 
-public class RedisDictLoader {
+import redis.clients.jedis.DefaultJedisClientConfig;
+import redis.clients.jedis.HostAndPort;
+import redis.clients.jedis.JedisClientConfig;
+import redis.clients.jedis.JedisPooled;
+
+public class RedisDictLoader implements AutoCloseable {
 
     private final JedisPooled jedis;
 
     public RedisDictLoader(String host, int port, String password) {
         if (password != null && !password.isEmpty()) {
-            this.jedis = new JedisPooled(host, port, null, password);
+            JedisClientConfig cfg = DefaultJedisClientConfig.builder()
+                    .password(password)
+                    .build();
+            this.jedis = new JedisPooled(new HostAndPort(host, port), cfg);
         } else {
             this.jedis = new JedisPooled(host, port);
         }
@@ -23,7 +30,10 @@ public class RedisDictLoader {
         return jedis.hgetAll(key);
     }
 
+    @Override
     public void close() {
-        jedis.close();
+        if (jedis != null) {
+            jedis.close();
+        }
     }
 }
