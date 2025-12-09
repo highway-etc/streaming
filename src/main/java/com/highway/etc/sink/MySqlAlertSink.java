@@ -27,6 +27,8 @@ public class MySqlAlertSink extends RichSinkFunction<Alert> {
 
     @Override
     public void open(Configuration parameters) throws Exception {
+        // 显式加载 JDBC Driver
+        Class.forName("com.mysql.jdbc.Driver");
         conn = DriverManager.getConnection(url, user, password);
         conn.setAutoCommit(true);
         ps = conn.prepareStatement(insertSql);

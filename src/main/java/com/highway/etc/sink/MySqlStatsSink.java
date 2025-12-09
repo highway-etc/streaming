@@ -30,6 +30,8 @@ public class MySqlStatsSink extends RichSinkFunction<StatsRecord> {
 
     @Override
     public void open(Configuration parameters) throws Exception {
+        // 显式加载 JDBC Driver，避免服务发现在用户类加载器下失效
+        Class.forName("com.mysql.jdbc.Driver");
         conn = DriverManager.getConnection(url, user, password);
         conn.setAutoCommit(true);
         ps = conn.prepareStatement(insertSql);

@@ -15,7 +15,7 @@
         <flink.kafka.connector.version>3.0.2-1.18</flink.kafka.connector.version>
         <jackson.version>2.17.1</jackson.version>
         <jedis.version>4.4.6</jedis.version>
-        <mysql.version>8.3.0</mysql.version>
+        <mysql.version>5.1.49</mysql.version>
     </properties>
 
     <dependencies>
@@ -47,12 +47,11 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- 代码里直接用 JDBC（运行时容器放 mysql-connector-j.jar），这里 provided 仅供编译 -->
+        <!-- JDBC 驱动（打入 jar，避免 MyCat 的 auth 协议兼容问题） -->
         <dependency>
-            <groupId>com.mysql</groupId>
-            <artifactId>mysql-connector-j</artifactId>
+            <groupId>mysql</groupId>
+            <artifactId>mysql-connector-java</artifactId>
             <version>${mysql.version}</version>
-            <scope>provided</scope>
         </dependency>
 
         <!-- Jackson JSON -->
@@ -81,7 +80,34 @@
                     <encoding>${project.build.sourceEncoding}</encoding>
                 </configuration>
             </plugin>
-            <!-- 不做 shaded fat-jar，Flink 推荐“细 JAR + 连接器外置” -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.3</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <artifactSet>
+                                <!-- 只打包非 provided 依赖（Jackson/Jedis 等）到 fat-jar，连接器仍由集群外置 -->
+                                <includes>
+                                    <include>com.fasterxml.jackson.core:*</include>
+                                    <include>redis.clients:jedis</include>
+                                    <include>mysql:mysql-connector-java</include>
+                                </includes>
+                            </artifactSet>
+                            <transformers>
+                                <!-- 合并 SPI 服务定义，确保 JDBC Driver 等通过 ServiceLoader 正常注册 -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
+                            </transformers>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
         <finalName>streaming-0.1.0</finalName>
     </build>

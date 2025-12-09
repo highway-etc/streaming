@@ -40,6 +40,8 @@ public class MySqlBatchSink extends RichSinkFunction<EnrichedEvent> implements C
 
     @Override
     public void open(Configuration parameters) throws Exception {
+        // 确保 JDBC Driver 在独立类加载器下被显式注册
+        Class.forName("com.mysql.jdbc.Driver");
         conn = DriverManager.getConnection(url, user, password);
         conn.setAutoCommit(false);
         ps = conn.prepareStatement(insertSql);
