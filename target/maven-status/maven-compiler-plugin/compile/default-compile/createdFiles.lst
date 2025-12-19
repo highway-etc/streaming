@@ -15,3 +15,4 @@ com\highway\etc\common\Event.class
 com\highway\etc\sink\MySqlBatchSink.class
 com\highway\etc\common\StatsRecord.class
 com\highway\etc\sink\MySqlAlertSink.class
+com\highway\etc\job\TrafficStreamingJob$DeduplicateOnce.class

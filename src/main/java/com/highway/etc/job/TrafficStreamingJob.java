@@ -8,12 +8,19 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.api.common.serialization.AbstractDeserializationSchema;
+import org.apache.flink.api.common.state.StateTtlConfig;
+import org.apache.flink.api.common.state.ValueState;
+import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.environment.CheckpointConfig;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
@@ -45,8 +52,20 @@ public class TrafficStreamingJob {
         String insertSql = JsonUtils.requireProperty(props, "mysql.insert.sql");
         String statsInsertSql = JsonUtils.requireProperty(props, "mysql.stats.insert.sql");
         long watermarkOutOfOrderMs = Long.parseLong(JsonUtils.optionalProperty(props, "event.out.of.order.ms", "120000"));
+        long dedupHours = Long.parseLong(JsonUtils.optionalProperty(props, "dedup.hours", "24"));
+        int parallelism = Integer.parseInt(JsonUtils.optionalProperty(props, "job.parallelism", "4"));
+        long checkpointIntervalMs = Long.parseLong(JsonUtils.optionalProperty(props, "checkpoint.interval.ms", "60000"));
+        long checkpointTimeoutMs = Long.parseLong(JsonUtils.optionalProperty(props, "checkpoint.timeout.ms", "120000"));
+        long minPauseBetweenCheckpointsMs = Long.parseLong(JsonUtils.optionalProperty(props, "checkpoint.min.pause.ms", "30000"));
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(parallelism);
+        env.enableCheckpointing(checkpointIntervalMs, CheckpointingMode.AT_LEAST_ONCE);
+        env.getCheckpointConfig().setMinPauseBetweenCheckpoints(minPauseBetweenCheckpointsMs);
+        env.getCheckpointConfig().setCheckpointTimeout(checkpointTimeoutMs);
+        env.getCheckpointConfig().enableUnalignedCheckpoints(true);
+        env.getCheckpointConfig().setExternalizedCheckpointCleanup(CheckpointConfig.ExternalizedCheckpointCleanup.RETAIN_ON_CANCELLATION);
+        env.setRestartStrategy(RestartStrategies.fixedDelayRestart(3, org.apache.flink.api.common.time.Time.seconds(10)));
         env.getConfig().setAutoWatermarkInterval(2000);
 
         KafkaSource<Event> kafkaSource = KafkaSource.<Event>builder()
@@ -66,10 +85,15 @@ public class TrafficStreamingJob {
 
         DataStream<EnrichedEvent> enriched = raw.map(TrafficStreamingJob::enrich).name("enrich-map");
 
-        enriched.addSink(new MySqlBatchSink(mysqlUrl, mysqlUser, mysqlPwd, insertSql, batchSize))
+        DataStream<EnrichedEvent> deduped = enriched
+                .keyBy(TrafficStreamingJob::dedupKey)
+                .process(new DeduplicateOnce(org.apache.flink.api.common.time.Time.hours(dedupHours)))
+                .name("deduplicate");
+
+        deduped.addSink(new MySqlBatchSink(mysqlUrl, mysqlUser, mysqlPwd, insertSql, batchSize))
                 .name("mysql-batch-sink");
 
-        DataStream<StatsRecord> stats = enriched
+        DataStream<StatsRecord> stats = deduped
                 .keyBy((KeySelector<EnrichedEvent, Integer>) e -> e.stationId)
                 .window(TumblingEventTimeWindows.of(Time.seconds(30)))
                 .process(new StatsWindowFn())
@@ -103,6 +127,18 @@ public class TrafficStreamingJob {
         }
         int visible = Math.min(4, event.hphm.length());
         return event.hphm.substring(0, visible) + "****";
+    }
+
+    private static String dedupKey(EnrichedEvent e) {
+        if (e == null) {
+            return "null";
+        }
+        if (e.gcxh > 0) {
+            return "id:" + e.gcxh;
+        }
+        String plate = e.hphm == null ? "UNKNOWN" : e.hphm;
+        long tsBucket = e.gcsj == null ? 0L : e.gcsj.toEpochMilli() / 1000; // seconds bucket
+        return plate + "|" + e.stationId + "|" + tsBucket;
     }
 
     private static class StatsWindowFn extends ProcessWindowFunction<EnrichedEvent, StatsRecord, Integer, TimeWindow> {
@@ -161,6 +197,46 @@ public class TrafficStreamingJob {
                 e.stationId = 0; // 让上游 filter 掉
                 return e;
             }
+        }
+    }
+
+    /**
+     * Deduplicate by key (gcxh if present, otherwise plate+station+second) with
+     * TTL.
+     */
+    public static class DeduplicateOnce extends KeyedProcessFunction<String, EnrichedEvent, EnrichedEvent> {
+
+        private final org.apache.flink.api.common.time.Time ttl;
+        private transient ValueState<Boolean> seen;
+
+        public DeduplicateOnce(org.apache.flink.api.common.time.Time ttl) {
+            this.ttl = ttl;
+        }
+
+        @Override
+        public void open(org.apache.flink.configuration.Configuration parameters) throws Exception {
+            StateTtlConfig ttlConfig = StateTtlConfig
+                    .newBuilder(ttl)
+                    .setUpdateType(StateTtlConfig.UpdateType.OnCreateAndWrite)
+                    .setStateVisibility(StateTtlConfig.StateVisibility.NeverReturnExpired)
+                    .cleanupFullSnapshot()
+                    .build();
+            ValueStateDescriptor<Boolean> desc = new ValueStateDescriptor<>("seen", Boolean.class);
+            desc.enableTimeToLive(ttlConfig);
+            seen = getRuntimeContext().getState(desc);
+        }
+
+        @Override
+        public void processElement(EnrichedEvent value, Context ctx, Collector<EnrichedEvent> out) throws Exception {
+            if (value == null) {
+                return;
+            }
+            Boolean existed = seen.value();
+            if (Boolean.TRUE.equals(existed)) {
+                return; // duplicate
+            }
+            seen.update(Boolean.TRUE);
+            out.collect(value);
         }
     }
 }
