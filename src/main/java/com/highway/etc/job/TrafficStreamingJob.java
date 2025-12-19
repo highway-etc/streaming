@@ -53,7 +53,7 @@ public class TrafficStreamingJob {
         String statsInsertSql = JsonUtils.requireProperty(props, "mysql.stats.insert.sql");
         long watermarkOutOfOrderMs = Long.parseLong(JsonUtils.optionalProperty(props, "event.out.of.order.ms", "120000"));
         long dedupHours = Long.parseLong(JsonUtils.optionalProperty(props, "dedup.hours", "24"));
-        int parallelism = Integer.parseInt(JsonUtils.optionalProperty(props, "job.parallelism", "4"));
+        int parallelism = Integer.parseInt(JsonUtils.optionalProperty(props, "job.parallelism", "2"));
         long checkpointIntervalMs = Long.parseLong(JsonUtils.optionalProperty(props, "checkpoint.interval.ms", "60000"));
         long checkpointTimeoutMs = Long.parseLong(JsonUtils.optionalProperty(props, "checkpoint.timeout.ms", "120000"));
         long minPauseBetweenCheckpointsMs = Long.parseLong(JsonUtils.optionalProperty(props, "checkpoint.min.pause.ms", "30000"));
@@ -72,7 +72,7 @@ public class TrafficStreamingJob {
                 .setBootstrapServers(kafkaServers)
                 .setTopics(topic)
                 .setGroupId(props.getProperty("kafka.group.id", "traffic-consumer"))
-                .setStartingOffsets(OffsetsInitializer.latest())
+                .setStartingOffsets(OffsetsInitializer.earliest())
                 .setValueOnlyDeserializer(new EventDeserializer())
                 .build();
 

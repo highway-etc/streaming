@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.api.common.serialization.AbstractDeserializationSchema;
 import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
@@ -48,17 +49,29 @@ public class PlateCloneDetectionJob {
         long watermarkOutOfOrderMs = Long.parseLong(JsonUtils.optionalProperty(props, "event.out.of.order.ms", "120000"));
         double maxSpeed = Double.parseDouble(JsonUtils.optionalProperty(props, "clone.max.speed.kmh", "160"));
         long minDiffSec = Long.parseLong(JsonUtils.optionalProperty(props, "clone.min.time.diff.sec", "10"));
+        long checkpointInterval = Long.parseLong(JsonUtils.optionalProperty(props, "checkpoint.interval.ms", "60000"));
+        long checkpointMinPause = Long.parseLong(JsonUtils.optionalProperty(props, "checkpoint.min.pause.ms", "30000"));
+        long checkpointTimeout = Long.parseLong(JsonUtils.optionalProperty(props, "checkpoint.timeout.ms", "120000"));
+        int parallelism = Integer.parseInt(JsonUtils.optionalProperty(props, "job.parallelism", "2"));
 
         Map<Integer, StationInfo> stationMap = loadStationMap();
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(parallelism);
+        env.enableCheckpointing(checkpointInterval);
+        env.getCheckpointConfig().setMinPauseBetweenCheckpoints(checkpointMinPause);
+        env.getCheckpointConfig().setCheckpointTimeout(checkpointTimeout);
+        env.getCheckpointConfig().setTolerableCheckpointFailureNumber(3);
+        env.getCheckpointConfig().setExternalizedCheckpointCleanup(
+                org.apache.flink.streaming.api.environment.CheckpointConfig.ExternalizedCheckpointCleanup.RETAIN_ON_CANCELLATION);
+        env.setRestartStrategy(RestartStrategies.fixedDelayRestart(3, Time.seconds(10)));
         env.getConfig().setAutoWatermarkInterval(2000);
 
         KafkaSource<Event> source = KafkaSource.<Event>builder()
                 .setBootstrapServers(kafkaServers)
                 .setTopics(topic)
                 .setGroupId(props.getProperty("kafka.group.id", "plate-clone-consumer"))
-                .setStartingOffsets(OffsetsInitializer.latest())
+                .setStartingOffsets(OffsetsInitializer.earliest())
                 .setValueOnlyDeserializer(new BasicEventDeserializer())
                 .build();
 
