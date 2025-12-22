@@ -27,11 +27,11 @@ public class MySqlAlertSink extends RichSinkFunction<Alert> {
 
     @Override
     public void open(Configuration parameters) throws Exception {
-        // 显式加载 JDBC Driver，优先新版，兼容旧版
+        // 显式加载 JDBC Driver。MyCat 1.x 与 Connector/J 8 的 CLIENT_PLUGIN_AUTH 握手不兼容，先尝试旧版驱动，再降级到新版以避免连接失败。
         try {
-            Class.forName("com.mysql.cj.jdbc.Driver");
-        } catch (ClassNotFoundException ex) {
             Class.forName("com.mysql.jdbc.Driver");
+        } catch (ClassNotFoundException ex) {
+            Class.forName("com.mysql.cj.jdbc.Driver");
         }
         conn = DriverManager.getConnection(url, user, password);
         conn.setAutoCommit(true);
@@ -43,13 +43,14 @@ public class MySqlAlertSink extends RichSinkFunction<Alert> {
         if (a == null) {
             return;
         }
-        ps.setString(1, a.hphmMask);
-        ps.setInt(2, a.firstStationId);
-        ps.setInt(3, a.secondStationId);
-        ps.setLong(4, a.timeGapSec);
-        ps.setDouble(5, a.distanceKm);
-        ps.setDouble(6, a.speedKmh);
-        ps.setDouble(7, a.confidence);
+        ps.setInt(1, a.stationId);
+        ps.setString(2, a.hphmMask);
+        ps.setInt(3, a.firstStationId);
+        ps.setInt(4, a.secondStationId);
+        ps.setLong(5, a.timeGapSec);
+        ps.setDouble(6, a.distanceKm);
+        ps.setDouble(7, a.speedKmh);
+        ps.setDouble(8, a.confidence);
         ps.executeUpdate();
     }
 

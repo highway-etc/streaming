@@ -60,7 +60,7 @@ mysql.password=rootpass
 mysql.batch.size=500
 mysql.insert.sql=INSERT INTO traffic_pass_dev (gcsj,xzqhmc,adcode,kkmc,station_id,fxlx,hpzl,hphm_mask,clppxh,created_at) VALUES (?,?,?,?,?,?,?,?,?,NOW())
 mysql.stats.insert.sql=INSERT INTO stats_realtime (station_id,window_start,window_end,cnt,by_dir,by_type) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE cnt=VALUES(cnt),by_dir=VALUES(by_dir),by_type=VALUES(by_type)
-mysql.alert.insert.sql=INSERT INTO alert_plate_clone (hphm_mask,first_station_id,second_station_id,time_gap_sec,distance_km,speed_kmh,confidence,created_at) VALUES (?,?,?,?,?,?,?,NOW())
+mysql.alert.insert.sql=INSERT INTO alert_plate_clone (station_id,hphm_mask,first_station_id,second_station_id,time_gap_sec,distance_km,speed_kmh,confidence,created_at) VALUES (?,?,?,?,?,?,?,?,NOW())
 
 # Stream watermark out-of-orderness
 event.out.of.order.ms=120000

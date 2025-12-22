@@ -197,10 +197,15 @@ public class PlateCloneDetectionJob {
                 double speedKmh = hours == 0 ? Double.POSITIVE_INFINITY : distanceKm / hours;
 
                 if (speedKmh > maxSpeedKmh) {
+                    boolean currentAfterPrev = current.gcsj.isAfter(prev.gcsj);
+                    int firstId = currentAfterPrev ? prev.stationId : current.stationId;
+                    int secondId = currentAfterPrev ? current.stationId : prev.stationId;
+                    int shardStationId = firstId; // route by the earlier station to satisfy MyCat sharding
                     Alert alert = Alert.of(
+                            shardStationId,
                             maskPlate(current),
-                            current.gcsj.isAfter(prev.gcsj) ? prev.stationId : current.stationId,
-                            current.gcsj.isAfter(prev.gcsj) ? current.stationId : prev.stationId,
+                            firstId,
+                            secondId,
                             diffSec,
                             distanceKm,
                             speedKmh,

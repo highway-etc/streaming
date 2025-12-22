@@ -11,6 +11,11 @@ public class Alert implements Serializable {
     private static final long serialVersionUID = 1L;
 
     public String hphmMask;
+    /**
+     * Sharding key for alert_plate_clone, use earlier station to keep routing
+     * stable.
+     */
+    public int stationId;
     public int firstStationId;
     public int secondStationId;
     public long timeGapSec;
@@ -19,9 +24,10 @@ public class Alert implements Serializable {
     public double confidence;
     public Instant generatedAt;
 
-    public static Alert of(String plateMask, int firstId, int secondId,
+    public static Alert of(int shardStationId, String plateMask, int firstId, int secondId,
             long gapSec, double distanceKm, double speedKmh, double confidence) {
         Alert a = new Alert();
+        a.stationId = shardStationId;
         a.hphmMask = plateMask;
         a.firstStationId = firstId;
         a.secondStationId = secondId;

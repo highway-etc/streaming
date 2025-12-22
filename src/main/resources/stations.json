@@ -1,5 +1,20 @@
 [
-  { "stationId": 101, "name": "Station-A", "lat": 23.129, "lon": 113.264 },
-  { "stationId": 102, "name": "Station-B", "lat": 22.543, "lon": 114.057 },
-  { "stationId": 103, "name": "Station-C", "lat": 23.392, "lon": 116.700 }
+  { "stationId": 101, "name": "南京江北站", "lat": 32.100, "lon": 118.700 },
+  { "stationId": 102, "name": "苏州阳澄湖站", "lat": 31.410, "lon": 120.820 },
+  { "stationId": 103, "name": "无锡惠山站", "lat": 31.650, "lon": 120.280 },
+  { "stationId": 104, "name": "北京大兴机场站", "lat": 39.510, "lon": 116.410 },
+  { "stationId": 105, "name": "上海浦东川沙站", "lat": 31.210, "lon": 121.690 },
+  { "stationId": 106, "name": "广州花都站", "lat": 23.400, "lon": 113.220 },
+  { "stationId": 107, "name": "深圳南山站", "lat": 22.540, "lon": 113.930 },
+  { "stationId": 108, "name": "重庆绕城北站", "lat": 29.720, "lon": 106.630 },
+  { "stationId": 109, "name": "成都绕城东站", "lat": 30.610, "lon": 104.120 },
+  { "stationId": 110, "name": "济南东站", "lat": 36.670, "lon": 117.120 },
+  { "stationId": 111, "name": "郑州航空港站", "lat": 34.530, "lon": 113.840 },
+  { "stationId": 112, "name": "武汉北三环站", "lat": 30.760, "lon": 114.320 },
+  { "stationId": 113, "name": "西安绕城南站", "lat": 34.000, "lon": 108.900 },
+  { "stationId": 114, "name": "合肥肥东站", "lat": 31.870, "lon": 117.460 },
+  { "stationId": 115, "name": "福州南通道站", "lat": 26.050, "lon": 119.300 },
+  { "stationId": 116, "name": "杭州临安站", "lat": 30.230, "lon": 119.720 },
+  { "stationId": 117, "name": "乌鲁木齐绕城站", "lat": 43.900, "lon": 87.500 },
+  { "stationId": 118, "name": "拉萨柳梧站", "lat": 29.650, "lon": 91.120 }
 ]

@@ -110,12 +110,31 @@ public class TrafficStreamingJob {
         ne.xzqhmc = e.xzqhmc == null ? "" : e.xzqhmc;
         ne.kkmc = e.kkmc == null ? "" : e.kkmc;
         ne.fxlx = e.fxlx == null ? "" : e.fxlx;
-        ne.hpzl = e.hpzl == null ? "" : e.hpzl;
+        ne.hpzl = mapVehicleType(e.hpzl);
         ne.hphm = e.hphm == null ? "" : e.hphm;
         ne.hphmMask = maskPlate(e);
         ne.clppxh = e.clppxh == null ? "" : e.clppxh;
         ne.tags = Collections.emptyMap();
         return ne;
+    }
+
+    private static String mapVehicleType(String type) {
+        if (type == null) {
+            return "未知车型";
+        }
+        String t = type.trim();
+        switch (t) {
+            case "1":
+                return "小型汽车";
+            case "2":
+                return "大型汽车";
+            case "13":
+                return "农用运输车";
+            case "-":
+                return "未知车型";
+            default:
+                return t;
+        }
     }
 
     private static String maskPlate(Event event) {
